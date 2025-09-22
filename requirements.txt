@@ -4,6 +4,7 @@ joblib
 yfinance
 numpy
 praw
-transformers
-torch
+torch>=2.2.0
+transformers>=4.41.0
+
 
