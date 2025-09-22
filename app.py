@@ -23,7 +23,7 @@ class Prediction:
         pred2 = self.stack2_model.predict_proba(data[n:])[:,1]
         stacked_X = np.column_stack((pred1, pred2))
         final_pred = self.meta_model.predict_proba(stacked_X)
-        return final_pred[:,1][-1]
+        return final_pred[:,1]
 
 class DataCleaner:
     def call(self,df):
@@ -92,3 +92,4 @@ if st.button("Predict"):
     # Add binary interpretation
     direction = "⬆️ UP" if probs[-1] > 0.5 else "⬇️ DOWN"
     st.write(f"Predicted Direction: **{direction}**")
+
