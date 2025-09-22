@@ -93,7 +93,7 @@ class SentimentAnalysis:
         return np.array(val[sentiment["label"]])
 
     def calculate_score(self, current, sentiment):
-    return current + self.sentiment_picker(sentiment)
+        return current + self.sentiment_picker(sentiment)
 
     def call(self, subreddits):
         dictionairy = {}
@@ -148,6 +148,7 @@ if st.button("Predict"):
     st.write(f"Sentiment Analysis for {ticker}: {dictionairy[ticker][0]} Positive {dictionairy[ticker][0]} Neutral {dictionairy[ticker][0]} Negative")
     direction = "⬆️ UP" if probs[-1] > 0.5 else "⬇️ DOWN"
     st.write(f"Predicted Direction: **{direction}**")
+
 
 
 
