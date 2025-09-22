@@ -81,15 +81,24 @@ class DataCleaner:
 
 class SentimentAnalysis:
     def __init__(self):
-        self.classifier = pipeline("sentiment-analysis",
-                     model="cardiffnlp/twitter-roberta-base-sentiment-latest", truncation=True,max_length=512)
+        self.classifier = pipeline(
+            "sentiment-analysis",
+            model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+            truncation=True,
+            max_length=512
+        )
         self.reddit = praw.Reddit(
-    client_id = st.secrets["reddit"]["client_id"],
-            client_secret = st.secrets["reddit"]["client_secret"],
-            user_agent = st.secrets["reddit"]["user_agent"]
-)
-    def sentiment_picker(self,sentiment):
-        val = {"positive":[1,0,0],"negative":[0,0,1],"neutral":[0,1,0]}
+            client_id=st.secrets["reddit"]["client_id"],
+            client_secret=st.secrets["reddit"]["client_secret"],
+            user_agent=st.secrets["reddit"]["user_agent"]
+        )
+        self.common_tickers = {
+            'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
+            'BRK.B', 'VOO', 'VTI', 'QQQ', 'SPY', 'IVV', 'JPM', 'V', 'MA', 'UNH'
+        }
+
+    def sentiment_picker(self, sentiment):
+        val = {"positive": [1, 0, 0], "negative": [0, 0, 1], "neutral": [0, 1, 0]}
         return np.array(val[sentiment["label"]])
 
     def calculate_score(self, current, sentiment):
@@ -99,11 +108,11 @@ class SentimentAnalysis:
         dictionairy = {}
         ticker_counter = Counter()
         ticker_pattern = re.compile(r'\b[A-Z]{3,5}\b')
-    
+
         reddits = []
         for s in subreddits:
             reddits += list(self.reddit.subreddit(s).top(time_filter="week", limit=500))
-    
+
         for submission in reddits:
             title_text = submission.title + " " + (submission.selftext or "")
             potential_tickers = ticker_pattern.findall(title_text)
@@ -111,7 +120,7 @@ class SentimentAnalysis:
                 if ticker in self.common_tickers:
                     sentiment = self.classifier(title_text)[0]
                     dictionairy[ticker] = self.calculate_score(dictionairy.get(ticker, np.zeros(3)), sentiment)
-    
+
             submission.comments.replace_more(limit=10)
             for comment in submission.comments.list():
                 comment_text = comment.body
@@ -120,7 +129,7 @@ class SentimentAnalysis:
                     if ticker in self.common_tickers:
                         sentiment = self.classifier(comment_text)[0]
                         dictionairy[ticker] = self.calculate_score(dictionairy.get(ticker, np.zeros(3)), sentiment)
-    
+
         return dictionairy
 
 
@@ -148,6 +157,7 @@ if st.button("Predict"):
     st.write(f"Sentiment Analysis for {ticker}: {dictionairy[ticker][0]} Positive {dictionairy[ticker][0]} Neutral {dictionairy[ticker][0]} Negative")
     direction = "⬆️ UP" if probs[-1] > 0.5 else "⬇️ DOWN"
     st.write(f"Predicted Direction: **{direction}**")
+
 
 
 
