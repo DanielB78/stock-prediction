@@ -1,9 +1,9 @@
-fastapi
-uvicorn
-pandas
-numpy
-scikit-learn
-xgboost
-joblib
 streamlit
+pandas
+joblib
 yfinance
+numpy
+praw
+transformers
+torch
+
