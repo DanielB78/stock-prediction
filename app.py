@@ -79,19 +79,31 @@ class DataCleaner:
 
         return df
 
+
 class SentimentAnalysis:
     def __init__(self):
+        # --- Model setup (download from Hugging Face Hub if not cached) ---
+        model_name = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name, token=st.secrets["HF_TOKEN"])
+        model = AutoModelForSequenceClassification.from_pretrained(model_name, token=token=st.secrets["HF_TOKEN"])
+
         self.classifier = pipeline(
             "sentiment-analysis",
-            model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+            model=model,
+            tokenizer=tokenizer,
             truncation=True,
             max_length=512
         )
+
+        # --- Reddit API ---
         self.reddit = praw.Reddit(
             client_id=st.secrets["reddit"]["client_id"],
             client_secret=st.secrets["reddit"]["client_secret"],
             user_agent=st.secrets["reddit"]["user_agent"]
         )
+
+        # --- Common tickers ---
         self.common_tickers = {
             'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
             'BRK.B', 'VOO', 'VTI', 'QQQ', 'SPY', 'IVV', 'JPM', 'V', 'MA', 'UNH'
@@ -105,33 +117,49 @@ class SentimentAnalysis:
         return current + self.sentiment_picker(sentiment)
 
     def call(self, subreddits):
+        # allow both string and list input
+        if isinstance(subreddits, str):
+            subreddits = [subreddits.replace("r/", "")]
+        else:
+            subreddits = [s.replace("r/", "") for s in subreddits]
+
         dictionairy = {}
-        ticker_counter = Counter()
         ticker_pattern = re.compile(r'\b[A-Z]{3,5}\b')
 
         reddits = []
         for s in subreddits:
             reddits += list(self.reddit.subreddit(s).top(time_filter="week", limit=500))
 
+        # --- Collect texts to batch-classify ---
+        texts_to_classify = []
+        ticker_map = []
+
         for submission in reddits:
-            title_text = submission.title + " " + (submission.selftext or "")
-            potential_tickers = ticker_pattern.findall(title_text)
+            # Submission title + text
+            text = submission.title + " " + (submission.selftext or "")
+            potential_tickers = ticker_pattern.findall(text)
             for ticker in potential_tickers:
                 if ticker in self.common_tickers:
-                    sentiment = self.classifier(title_text)[0]
-                    dictionairy[ticker] = self.calculate_score(dictionairy.get(ticker, np.zeros(3)), sentiment)
+                    texts_to_classify.append(text)
+                    ticker_map.append(ticker)
 
+            # Comments
             submission.comments.replace_more(limit=10)
             for comment in submission.comments.list():
-                comment_text = comment.body
-                potential_tickers = ticker_pattern.findall(comment_text)
+                text = comment.body
+                potential_tickers = ticker_pattern.findall(text)
                 for ticker in potential_tickers:
                     if ticker in self.common_tickers:
-                        sentiment = self.classifier(comment_text)[0]
-                        dictionairy[ticker] = self.calculate_score(dictionairy.get(ticker, np.zeros(3)), sentiment)
+                        texts_to_classify.append(text)
+                        ticker_map.append(ticker)
+
+        # --- Batch classify all texts at once ---
+        if texts_to_classify:
+            sentiments = self.classifier(texts_to_classify, truncation=True, max_length=512)
+            for ticker, sentiment in zip(ticker_map, sentiments):
+                dictionairy[ticker] = self.calculate_score(dictionairy.get(ticker, np.zeros(3)), sentiment)
 
         return dictionairy
-
 
 st.title("📈 Stock Price Movement Prediction")
 
@@ -157,6 +185,7 @@ if st.button("Predict"):
     st.write(f"Sentiment Analysis for {ticker}: {dictionairy[ticker][0]} Positive {dictionairy[ticker][0]} Neutral {dictionairy[ticker][0]} Negative")
     direction = "⬆️ UP" if probs[-1] > 0.5 else "⬇️ DOWN"
     st.write(f"Predicted Direction: **{direction}**")
+
 
 
 
