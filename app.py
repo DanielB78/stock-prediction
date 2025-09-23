@@ -140,7 +140,7 @@ ticker = st.selectbox(
     ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
                   'BRK.B', 'VOO', 'VTI', 'QQQ', 'SPY', 'IVV', 'JPM', 'V', 'MA', 'UNH']  # you can add more here
 )
-dictionairy = SentimentAnalysis().call(["r/investing","r/stocks","r/wallstreetbets","r/personalfinance","r/FinancialPlanning","r/financialindependence","r/CryptoCurrency"])
+dictionairy = SentimentAnalysis().call(["investing","stocks","wallstreetbets","personalfinance","FinancialPlanning","financialindependence","CryptoCurrency"])
 if st.button("Predict"):
     model = Prediction()
     probs = model.call(ticker)
@@ -157,6 +157,7 @@ if st.button("Predict"):
     st.write(f"Sentiment Analysis for {ticker}: {dictionairy[ticker][0]} Positive {dictionairy[ticker][0]} Neutral {dictionairy[ticker][0]} Negative")
     direction = "⬆️ UP" if probs[-1] > 0.5 else "⬇️ DOWN"
     st.write(f"Predicted Direction: **{direction}**")
+
 
 
 
