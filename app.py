@@ -24,8 +24,8 @@ class Prediction:
         data = data.rename(columns={"Close": "Adj Close"})
         data = data.drop("target", axis=1)
         n = len(data) //2
-        pred1= self.stack1_model.predict_proba(data[:n])[:,1]
-        pred2 = self.stack2_model.predict_proba(data[n:])[:,1]
+        pred1= self.stack1_model.predict_proba(data)[:,1]
+        pred2 = self.stack2_model.predict_proba(data)[:,1]
         stacked_X = np.column_stack((pred1, pred2))
         final_pred = self.meta_model.predict_proba(stacked_X)
         return final_pred[:,1]
@@ -80,111 +80,110 @@ class DataCleaner:
         return df
 
 
-class SentimentAnalysis:
-    def __init__(self):
-        # --- Model setup (download from Hugging Face Hub if not cached) ---
-        model_name = "cardiffnlp/twitter-roberta-base-sentiment-latest"
 
-        tokenizer = AutoTokenizer.from_pretrained(model_name, token=st.secrets["HF_TOKEN"])
-        model = AutoModelForSequenceClassification.from_pretrained(model_name, token=token=st.secrets["HF_TOKEN"])
 
-        self.classifier = pipeline(
-            "sentiment-analysis",
-            model=model,
-            tokenizer=tokenizer,
-            truncation=True,
-            max_length=512
-        )
+import gradio as gr
 
-        # --- Reddit API ---
-        self.reddit = praw.Reddit(
-            client_id=st.secrets["reddit"]["client_id"],
-            client_secret=st.secrets["reddit"]["client_secret"],
-            user_agent=st.secrets["reddit"]["user_agent"]
-        )
+def strategy(prob):
+    ans =0
+    alpha = 0.5  # aggressiveness scaling
+    upper_th = 0.6  # 70% threshold
+    lower_th = 0.4  # 30% threshold
 
-        # --- Common tickers ---
-        self.common_tickers = {
-            'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
-            'BRK.B', 'VOO', 'VTI', 'QQQ', 'SPY', 'IVV', 'JPM', 'V', 'MA', 'UNH'
-        }
+    # Start neutral (multiplier = 1)
 
-    def sentiment_picker(self, sentiment):
-        val = {"positive": [1, 0, 0], "negative": [0, 0, 1], "neutral": [0, 1, 0]}
-        return np.array(val[sentiment["label"]])
 
-    def calculate_score(self, current, sentiment):
-        return current + self.sentiment_picker(sentiment)
+    # Long if above upper threshold
+    if prob >= upper_th:
+        ans= 1 + alpha * (prob - upper_th)
 
-    def call(self, subreddits):
-        # allow both string and list input
-        if isinstance(subreddits, str):
-            subreddits = [subreddits.replace("r/", "")]
-        else:
-            subreddits = [s.replace("r/", "") for s in subreddits]
+    # Short if below lower threshold
+    elif prob <= lower_th:
+        ans = -(1 + alpha * (lower_th - prob))
+    else:
+        ans=0
+    return ans
 
-        dictionairy = {}
-        ticker_pattern = re.compile(r'\b[A-Z]{3,5}\b')
+# Assuming you have these classes defined somewhere
+# from your_module import SentimentAnalysis, Prediction
 
-        reddits = []
-        for s in subreddits:
-            reddits += list(self.reddit.subreddit(s).top(time_filter="week", limit=500))
+import pandas as pd
+from dash import Dash, dcc, html, Output, Input
 
-        # --- Collect texts to batch-classify ---
-        texts_to_classify = []
-        ticker_map = []
+# Assuming you have these functions/classes from your code
+# from your_module import Prediction, strategy
 
-        for submission in reddits:
-            # Submission title + text
-            text = submission.title + " " + (submission.selftext or "")
-            potential_tickers = ticker_pattern.findall(text)
-            for ticker in potential_tickers:
-                if ticker in self.common_tickers:
-                    texts_to_classify.append(text)
-                    ticker_map.append(ticker)
+# Load sentiment data
+dictionairy = pd.read_csv("sentiment_data.csv", index_col=0)
 
-            # Comments
-            submission.comments.replace_more(limit=10)
-            for comment in submission.comments.list():
-                text = comment.body
-                potential_tickers = ticker_pattern.findall(text)
-                for ticker in potential_tickers:
-                    if ticker in self.common_tickers:
-                        texts_to_classify.append(text)
-                        ticker_map.append(ticker)
+# List of tickers
+tickers = [
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
+    'BRK.B', 'VOO', 'VTI', 'QQQ', 'SPY', 'IVV', 'JPM', 'V', 'MA', 'UNH'
+]
 
-        # --- Batch classify all texts at once ---
-        if texts_to_classify:
-            sentiments = self.classifier(texts_to_classify, truncation=True, max_length=512)
-            for ticker, sentiment in zip(ticker_map, sentiments):
-                dictionairy[ticker] = self.calculate_score(dictionairy.get(ticker, np.zeros(3)), sentiment)
-
-        return dictionairy
-
-st.title("📈 Stock Price Movement Prediction")
-
-ticker = st.selectbox(
-    "Choose a stock:",
-    ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
-                  'BRK.B', 'VOO', 'VTI', 'QQQ', 'SPY', 'IVV', 'JPM', 'V', 'MA', 'UNH']  # you can add more here
-)
-dictionairy = SentimentAnalysis().call(["investing","stocks","wallstreetbets","personalfinance","FinancialPlanning","financialindependence","CryptoCurrency"])
-if st.button("Predict"):
+# Prediction function
+def predict_stock(ticker):
+    # Stock prediction
     model = Prediction()
     probs = model.call(ticker)
 
+    # Latest prediction
+    prob_up = f"🔮 Probability of going UP: {probs[-1] * 100:.2f}%"
 
-    # Show last prediction
-    st.subheader(f"Latest prediction for {ticker}")
-    st.write(f"🔮 Probability of going UP: {probs[-1]*100:.2f}%")
-
-    # Add binary interpretation
+    # Binary interpretation
     direction = "⬆️ UP" if probs[-1] > 0.5 else "⬇️ DOWN"
-    st.write(f"Predicted Direction: **{direction}**")
+    direction_text = f"Predicted Direction: {direction}"
 
-    st.write(f"Sentiment Analysis for {ticker}: {dictionairy[ticker][0]} Positive {dictionairy[ticker][0]} Neutral {dictionairy[ticker][0]} Negative")
-    direction = "⬆️ UP" if probs[-1] > 0.5 else "⬇️ DOWN"
-    st.write(f"Predicted Direction: **{direction}**")
+    # Sentiment analysis
+    sentiment = dictionairy.loc[ticker]
+    sentiment_text = (
+        f"Sentiment Analysis for {ticker}: "
+        f"{sentiment[0]} Positive, {sentiment[1]} Neutral, {sentiment[2]} Negative"
+    )
+
+    # Strategy output
+    strat = strategy(probs[-1])
+    strat_text = strat
+
+    return prob_up, direction_text, sentiment_text, strat_text
+
+
+# Build Dash app
+app = Dash(__name__)
+
+app.layout = html.Div([
+    html.H1("📈 Stock Price Movement Prediction"),
+
+    dcc.Dropdown(
+        id="stock-dropdown",
+        options=[{"label": t, "value": t} for t in tickers],
+        value="AAPL",  # default ticker
+        clearable=False
+    ),
+
+    html.Div(id="prob-up", style={"marginTop": "20px", "fontSize": "18px"}),
+    html.Div(id="direction", style={"marginTop": "10px", "fontSize": "18px"}),
+    html.Div(id="sentiment", style={"marginTop": "10px", "fontSize": "18px"}),
+    html.Div(id="strategy", style={"marginTop": "10px", "fontSize": "18px", "fontWeight": "bold"})
+])
+
+
+# Define callback
+@app.callback(
+    [Output("prob-up", "children"),
+     Output("direction", "children"),
+     Output("sentiment", "children"),
+     Output("strategy", "children")],
+    [Input("stock-dropdown", "value")]
+)
+def update_output(ticker):
+    return predict_stock(ticker)
+
+
+if __name__ == "__main__":
+    app.run_server(debug=True)
+
 
 
 
