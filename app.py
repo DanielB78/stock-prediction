@@ -1,13 +1,7 @@
-import streamlit as st
-import pandas as pd
 import joblib
 import yfinance as yf
+
 import numpy as np
-import praw
-from collections import Counter
-import re
-import numpy as np
-from transformers import pipeline
 # Load trained model
 
 
@@ -184,6 +178,7 @@ def update_output(ticker):
 
 if __name__ == "__main__":
     app.run_server(debug=True)
+
 
 
 
