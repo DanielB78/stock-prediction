@@ -2,6 +2,7 @@ import joblib
 import yfinance as yf
 
 import numpy as np
+
 # Load trained model
 
 
@@ -109,7 +110,7 @@ from dash import Dash, dcc, html, Output, Input
 
 # Load sentiment data
 dictionairy = pd.read_csv("sentiment_data.csv", index_col=0)
-
+predictions = pd.read_csv("predictions.csv", index_col=0)
 # List of tickers
 tickers = [
     'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
@@ -119,14 +120,14 @@ tickers = [
 # Prediction function
 def predict_stock(ticker):
     # Stock prediction
-    model = Prediction()
-    probs = model.call(ticker)
+
+    probs = predictions[ticker]
 
     # Latest prediction
-    prob_up = f"🔮 Probability of going UP: {probs[-1] * 100:.2f}%"
+    prob_up = f"🔮 Probability of going UP: {probs * 100:.2f}%"
 
     # Binary interpretation
-    direction = "⬆️ UP" if probs[-1] > 0.5 else "⬇️ DOWN"
+    direction = "⬆️ UP" if probs > 0.5 else "⬇️ DOWN"
     direction_text = f"Predicted Direction: {direction}"
 
     # Sentiment analysis
@@ -137,7 +138,7 @@ def predict_stock(ticker):
     )
 
     # Strategy output
-    strat = strategy(probs[-1])
+    strat = strategy(probs)
     strat_text = strat
 
     return prob_up, direction_text, sentiment_text, strat_text
@@ -173,11 +174,11 @@ app.layout = html.Div([
 )
 def update_output(ticker):
     return predict_stock(ticker)
-    
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8050, debug=True)
+    app.run_server(debug=True)
+
 
 
 
