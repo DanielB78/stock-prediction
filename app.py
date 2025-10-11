@@ -121,7 +121,7 @@ tickers = [
 def predict_stock(ticker):
     # Stock prediction
 
-    prob = predictions.loc[ticker,"probs"]
+    probs = predictions.loc[ticker,"probs"]
 
     # Latest prediction
     prob_up = f"🔮 Probability of going UP: {probs * 100:.2f}%"
@@ -178,6 +178,7 @@ def update_output(ticker):
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8050)
+
 
 
 
